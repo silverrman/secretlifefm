@@ -15,10 +15,18 @@ document.addEventListener('DOMContentLoaded', () => {
         volumeSlider.value = savedVolume;
     }
     
-    // Media file paths
+    // Media file paths - adding error handling for hosting environments
     const staticAudioPath = 'secretlifestatic/secretlife_static.mp3';
     const mainAudioPath = 'secretlifemedia/1-SofaEditA.mp3';
     let currentAudioPath = staticAudioPath;
+    
+    // Audio loading error counter for retry logic
+    let audioLoadAttempts = 0;
+    const MAX_LOAD_ATTEMPTS = 3;
+    
+    // Add error logging for debugging
+    console.log('secretlife.fm - Script initialized');
+    console.log('Current time (local):', new Date().toString());
     
     // Function to check if current time is after 2 PM PST
     function isAfter2PMPST() {
@@ -153,21 +161,49 @@ document.addEventListener('DOMContentLoaded', () => {
         playButton.classList.add('hidden');
         loadingAnimation.classList.remove('hidden');
         
+        // Reset error counter on new play attempt
+        audioLoadAttempts = 0;
+        
         // Determine which audio to play based on current time
         if (isAfter2PMPST()) {
             currentAudioPath = mainAudioPath;
+            console.log('Starting main audio playback:', currentAudioPath);
         } else {
             currentAudioPath = staticAudioPath;
+            console.log('Starting static audio playback:', currentAudioPath);
         }
         
-        // Set audio source
-        audioPlayer.src = currentAudioPath;
+        // Ensure we have a proper URL - some hosting environments need full paths
+        // Try to build an absolute path by checking the window location
+        const baseUrl = window.location.href.replace(/\/[^/]*$/, '/');
+        const absolutePath = new URL(currentAudioPath, baseUrl).href;
+        
+        console.log('Base URL:', baseUrl);
+        console.log('Absolute path:', absolutePath);
+        
+        // Try different path strategies if we're on a hosting service
+        if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+            // On hosting service - try with absolute path
+            audioPlayer.src = absolutePath;
+        } else {
+            // Local development - use relative path
+            audioPlayer.src = currentAudioPath;
+        }
         
         // Set to loop continuously
         audioPlayer.loop = true;
         
+        // Add more debugging
+        console.log('Audio src set to:', audioPlayer.src);
+        
         // Load and play the audio
-        audioPlayer.load();
+        try {
+            audioPlayer.load();
+            console.log('Audio load initiated');
+        } catch (err) {
+            console.error('Error during audio load:', err);
+            showStatus('Error loading audio');
+        }
         
         audioPlayer.addEventListener('canplaythrough', () => {
             // Hide loading animation, show stop button
@@ -436,9 +472,40 @@ document.addEventListener('DOMContentLoaded', () => {
         showStatus('Playback ended');
     });
     
-    // Handle loading errors
-    audioPlayer.addEventListener('error', () => {
-        showStatus('Error loading audio. Please try again.');
+    // Enhanced error handling for audio loading
+    audioPlayer.addEventListener('error', (e) => {
+        console.error('Audio error:', e);
+        console.error('Audio error code:', audioPlayer.error ? audioPlayer.error.code : 'unknown');
+        console.error('Audio error message:', audioPlayer.error ? audioPlayer.error.message : 'unknown');
+        console.error('Current audio path:', audioPlayer.src);
+        
+        audioLoadAttempts++;
+        if (audioLoadAttempts < MAX_LOAD_ATTEMPTS) {
+            // Try an alternative path format as hosting environments can vary
+            const currentPath = audioPlayer.src;
+            let newPath;
+            
+            // If we're using a relative path, try with ./ prefix
+            if (!currentPath.startsWith('./') && !currentPath.startsWith('/') && !currentPath.startsWith('http')) {
+                newPath = './' + currentPath;
+            } else if (currentPath.includes('secretlifestatic')) {
+                // Try without folder structure if that's the issue
+                newPath = 'secretlife_static.mp3';
+            } else if (currentPath.includes('secretlifemedia')) {
+                // Try without folder structure if that's the issue
+                newPath = '1-SofaEditA.mp3';
+            }
+            
+            if (newPath && newPath !== currentPath) {
+                console.log('Retrying with alternative path:', newPath);
+                audioPlayer.src = newPath;
+                audioPlayer.load();
+                return;
+            }
+        }
+        
+        // If we've exhausted retries or have no alternative paths
+        showStatus('Error loading audio. Check console for details.');
         loadingAnimation.classList.add('hidden');
         playButton.classList.remove('hidden');
     });
