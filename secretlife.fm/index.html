@@ -3,14 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes"><!-- For Chrome/Android -->    
+    <meta name="apple-mobile-web-app-capable" content="yes"><!-- For iOS compatibility -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#ffffff">
     <meta name="description" content="secretlife.fm - A time-based audio experience">
     <title>secretlife.fm</title>
     <link rel="stylesheet" href="styles.css">
-    <!-- PWA Support -->
-    <link rel="manifest" href="manifest.json">
+    <!-- PWA Support with conditional loading to avoid CORS issues -->
+    <script>
+        // Only load manifest.json when served via http(s) to avoid CORS errors
+        if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+            const manifestLink = document.createElement('link');
+            manifestLink.rel = 'manifest';
+            manifestLink.href = 'manifest.json';
+            document.head.appendChild(manifestLink);
+        }
+    </script>
     <link rel="icon" href="favicon.ico" type="image/x-icon">
     <link rel="apple-touch-icon" href="favicon.ico">
     <!-- Preload the background image to avoid flicker -->

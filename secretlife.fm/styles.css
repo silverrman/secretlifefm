@@ -43,6 +43,11 @@ body.with-background {
     height: 100%;
     width: 100%;
     padding: 20px;
+    position: fixed; /* Keep container fixed to ensure full height on mobile */
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
 }
 
 .control-wrapper {
@@ -51,6 +56,7 @@ body.with-background {
     justify-content: center;
     align-items: center;
     flex-direction: column;
+    transform: translateY(0); /* Reset any potential offsets */
 }
 
 .control-button {
@@ -277,6 +283,27 @@ body.with-background {
     
     body.with-background {
         background-position: center center;
+    }
+    
+    .container {
+        /* Ensure proper centering on small screens */
+        align-items: center;
+        justify-content: center;
+        padding: 10px; /* Reduce padding on small screens */
+    }
+    
+    .control-wrapper {
+        /* Place controls truly in the center */
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+    }
+    
+    /* Ensure touch targets are large enough */
+    .control-button {
+        min-width: 60px;
+        min-height: 60px;
     }
 }
 

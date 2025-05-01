@@ -538,10 +538,34 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 3000);
     }
     
-    // Prevent mobile keyboard from appearing when clicking on elements
+    // Modified event handler to avoid interfering with button clicks on mobile
     document.addEventListener('click', (e) => {
-        if (e.target.tagName !== 'INPUT') {
+        // Only prevent default for elements that aren't buttons, inputs, or controls
+        if (e.target.tagName !== 'INPUT' && 
+            !e.target.classList.contains('control-button') && 
+            !e.target.closest('.control-button') && 
+            !e.target.closest('#volume-control')) {
             e.preventDefault();
         }
     }, { passive: false });
+    
+    // Add specific touch event handler for mobile devices
+    if ('ontouchstart' in window) {
+        console.log('Touch device detected, adding touch handlers');
+        
+        // Add touch handlers to buttons for better mobile responsiveness
+        playButton.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (!playButton.classList.contains('hidden')) {
+                playButton.click();
+            }
+        });
+        
+        stopButton.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (!stopButton.classList.contains('hidden')) {
+                stopButton.click();
+            }
+        });
+    }
 });
