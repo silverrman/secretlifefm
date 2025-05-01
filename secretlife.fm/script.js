@@ -1,3 +1,6 @@
+// Status indicator timeout variable declared globally to prevent hoisting issues
+let statusTimeout;
+
 document.addEventListener('DOMContentLoaded', () => {
     // Core elements
     const playButton = document.getElementById('play-button');
@@ -511,8 +514,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // Status indicator function
-    let statusTimeout;
     function showStatus(message) {
+        // Safely handle the case where statusIndicator might not be available yet
+        if (!statusIndicator) {
+            console.warn('Status indicator not available yet');
+            console.log('Status message:', message);
+            return;
+        }
+        
         // Clear any existing timeout
         if (statusTimeout) {
             clearTimeout(statusTimeout);
