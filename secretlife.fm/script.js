@@ -1,5 +1,7 @@
-// Status indicator timeout variable declared globally to prevent hoisting issues
+// Global variables to prevent hoisting issues
 let statusTimeout;
+let listenerCountUpdateInterval;
+let stateCheckInterval;
 
 document.addEventListener('DOMContentLoaded', () => {
     // Core elements
@@ -10,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const volumeControl = document.getElementById('volume-control');
     const volumeSlider = document.getElementById('volume-slider');
     const statusIndicator = document.getElementById('status-indicator');
+    const listenerCountElement = document.getElementById('listener-count');
     
     // Load saved volume preference if available
     if (localStorage.getItem('secretlife_volume')) {
@@ -18,10 +21,31 @@ document.addEventListener('DOMContentLoaded', () => {
         volumeSlider.value = savedVolume;
     }
     
-    // Media file paths - adding error handling for hosting environments
+    // Audio paths - using the same paths that worked in the test HTML file
+    const mainAudioPath = 'secretlifemedia/SofaEditB.mp3';
     const staticAudioPath = 'secretlifestatic/secretlife_static.mp3';
-    const mainAudioPath = 'secretlifemedia/1-SofaEditA.mp3';
+    
+    // Log the paths for debugging
+    console.log('Main audio path:', mainAudioPath);
+    console.log('Static audio path:', staticAudioPath);
+    
+    // Initial setup - this will be changed based on time
     let currentAudioPath = staticAudioPath;
+    
+    // Add error handling for audio loading
+    audioPlayer.addEventListener('error', function(e) {
+        console.error('Audio error event:', e);
+        if (audioPlayer.error) {
+            console.error('Audio error code:', audioPlayer.error.code);
+            console.error('Audio error message:', audioPlayer.error.message);
+        }
+        console.error('Current audio src:', audioPlayer.src);
+    });
+    
+    // Add a listener to confirm when audio can play
+    audioPlayer.addEventListener('canplaythrough', function() {
+        console.log('Audio is ready to play through without buffering:', audioPlayer.src);
+    });
     
     // Audio loading error counter for retry logic
     let audioLoadAttempts = 0;
@@ -31,34 +55,207 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('secretlife.fm - Script initialized');
     console.log('Current time (local):', new Date().toString());
     
-    // Function to check if current time is after 2 PM PST
+    // Helper function to get Los Angeles (PST/PDT) time components
+    function getPacificTimeComponents() {
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/Los_Angeles',
+            hour: 'numeric',
+            minute: 'numeric',
+            second: 'numeric',
+            hour12: false
+        });
+        
+        const timeString = formatter.format(new Date());
+        const [hourStr, minuteStr, secondStr] = timeString.split(/[:\s]/).filter(part => part.match(/^\d+$/));
+        
+        return {
+            hour: parseInt(hourStr, 10),
+            minute: parseInt(minuteStr, 10),
+            second: parseInt(secondStr || '0', 10)
+        };
+    }
+    
+    // Function to check if current time is after 2 PM PST/PDT
     function isAfter2PMPST() {
-        const now = new Date();
-        // Convert current time to PST (UTC-7 for PDT, UTC-8 for PST)
-        // Using -7 for PDT (daylight saving)
-        const pstHour = (now.getUTCHours() - 7 + 24) % 24;
-        const pstMinute = now.getUTCMinutes();
-        return pstHour >= 14 && pstHour < 17; // Between 2 PM and 5 PM
+        const { hour } = getPacificTimeComponents();
+        return hour >= 14 && hour < 17; // Between 2 PM and 5 PM
     }
     
-    // Function to check if current time is before 1:59 PM PST
+    // Function to check if current time is before 1:59 PM PST/PDT
     function isBefore159PMPST() {
-        const now = new Date();
-        const pstHour = (now.getUTCHours() - 7 + 24) % 24;
-        const pstMinute = now.getUTCMinutes();
-        
-        return pstHour < 13 || (pstHour === 13 && pstMinute <= 59);
+        const { hour, minute } = getPacificTimeComponents();
+        return hour < 14 || (hour === 13 && minute < 59);
     }
     
-    // Function to check if current time is after 5 PM PST (for daily reset)
+    // Function to check if current time is after 5 PM PST/PDT
     function isAfter5PMPST() {
-        const now = new Date();
-        const pstHour = (now.getUTCHours() - 7 + 24) % 24;
-        
-        return pstHour >= 17; // 5 PM = 17:00
+        const { hour } = getPacificTimeComponents();
+        return hour >= 17; // 5 PM = 17:00
     }
     
-    // Function to update UI and audio based on time
+    // Get server time to synchronize playback across all users
+    function getServerTimeAndSync() {
+        // Use local time instead of server time to avoid errors with PHP
+        // This simplifies the code and avoids errors when running with Python's HTTP server
+        console.log('Using local time for synchronization');
+        syncAudioPlayback(new Date());
+        
+        // The original server time code is removed to avoid errors
+        // If PHP support is added later, this function can be enhanced again
+    }
+    
+    // Synchronize audio playback based on server time
+    function syncAudioPlayback(serverTime) {
+        if (!isAfter2PMPST() || isAfter5PMPST()) {
+            return; // Only sync during main content period
+        }
+        
+        // Format the server time to Pacific timezone
+        const pacificFormatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/Los_Angeles',
+            hour: 'numeric',
+            minute: 'numeric',
+            second: 'numeric',
+            hour12: false
+        });
+        
+        const timeString = pacificFormatter.format(serverTime);
+        const [hourStr, minuteStr, secondStr] = timeString.split(/[:\s]/).filter(part => part.match(/^\d+$/));
+        const pstHour = parseInt(hourStr, 10);
+        const pstMinute = parseInt(minuteStr, 10);
+        const pstSecond = parseInt(secondStr || '0', 10);
+        
+        // Calculate seconds since 2 PM PST/PDT
+        const secondsSince2PM = (pstHour - 14) * 3600 + pstMinute * 60 + pstSecond;
+        
+        // Only adjust if playing the main audio
+        if (audioPlayer.src.indexOf(mainAudioPath) !== -1) {
+            console.log(`Syncing playback to ${secondsSince2PM} seconds since 2 PM`);
+            
+            // Pause, set time, then play if it was playing
+            const wasPlaying = !audioPlayer.paused;
+            audioPlayer.pause();
+            
+            // Get audio duration to handle looping correctly
+            const audioDuration = audioPlayer.duration || 10800; // Default to 3 hours if duration unknown
+            
+            // Calculate position with looping support
+            const loopedPosition = secondsSince2PM % audioDuration;
+            
+            // Set the time with loop awareness
+            audioPlayer.currentTime = loopedPosition;
+            
+            if (wasPlaying) {
+                audioPlayer.play().catch(error => {
+                    console.error('Error playing synchronized audio:', error);
+                    showStatus('Playback error. Try again.');
+                });
+            }
+        }
+    }
+    
+    // Function to update listener count
+    function updateListenerCount() {
+        try {
+            fetch('update-listeners.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: audioPlayer.paused ? 'leave' : 'join',
+                    sessionId: getOrCreateSessionId()
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.count) {
+                    const listeners = parseInt(data.count);
+                    listenerCountElement.textContent = `${listeners} ${listeners === 1 ? 'listener' : 'listeners'}`;
+                }
+            })
+            .catch(error => {
+                console.warn('Could not update listener count:', error);
+            });
+        } catch (error) {
+            console.error('Error in updateListenerCount:', error);
+        }
+    }
+    
+    // Create or get session ID for listener tracking
+    function getOrCreateSessionId() {
+        let sessionId = localStorage.getItem('secretlife_session_id');
+        if (!sessionId) {
+            sessionId = 'user_' + Math.random().toString(36).substring(2, 15);
+            localStorage.setItem('secretlife_session_id', sessionId);
+        }
+        return sessionId;
+    }
+    
+    // Setup listener count ping interval (only when active)
+    function setupListenerCountInterval() {
+        clearInterval(listenerCountUpdateInterval);
+        if (!audioPlayer.paused) {
+            updateListenerCount(); // Update immediately when starting
+            listenerCountUpdateInterval = setInterval(updateListenerCount, 30000); // Update every 30 seconds
+        }
+    }
+    
+    // Simple check for time-based audio selection and state changes
+    function checkTimeState() {
+        // Simple time check: main audio from 2-5pm, static audio otherwise
+        const inMainAudioWindow = isAfter2PMPST() && !isAfter5PMPST(); // 2-5pm window
+        
+        // Check current state vs what it should be
+        const currentStateIsMainAudio = audioPlayer.src.includes(mainAudioPath);
+        const needsStateChange = currentStateIsMainAudio !== inMainAudioWindow;
+        
+        console.log(`Time check - In 2-5PM window: ${inMainAudioWindow}, Current audio is main: ${currentStateIsMainAudio}, Needs change: ${needsStateChange}`);
+        
+        // If we need to change state
+        if (needsStateChange) {
+            console.log('Audio source needs to change based on time');
+            
+            // Store current playing state before changing anything
+            const wasPlaying = !audioPlayer.paused;
+            
+            // Update the audio source based on time window
+            if (inMainAudioWindow) {
+                // 2-5PM: Use main audio
+                if (!audioPlayer.src.includes(mainAudioPath)) {
+                    console.log('Switching to main audio (2-5PM window)');
+                    audioPlayer.src = mainAudioPath;
+                    audioPlayer.load();
+                    document.body.classList.add('with-background');
+                    
+                    // If it was playing before, sync and continue playing
+                    if (wasPlaying) {
+                        getServerTimeAndSync();
+                    }
+                }
+            } else {
+                // Outside 2-5PM: Use static audio
+                if (!audioPlayer.src.includes(staticAudioPath)) {
+                    console.log('Switching to static audio (outside 2-5PM window)');
+                    audioPlayer.src = staticAudioPath;
+                    audioPlayer.load();
+                    document.body.classList.remove('with-background');
+                    
+                    // If it was playing before, continue playing static audio
+                    if (wasPlaying) {
+                        audioPlayer.play().catch(error => {
+                            console.error('Error playing static audio:', error);
+                        });
+                    }
+                }
+            }
+            
+            // Update UI to reflect new state
+            updateUI();
+        }
+    }
+    
+    // Update UI function with enhanced state management
     function updateUI() {
         const wasPlaying = !audioPlayer.paused;
         const currentTime = audioPlayer.currentTime;
@@ -66,191 +263,210 @@ document.addEventListener('DOMContentLoaded', () => {
         const isBefore159PM = isBefore159PMPST();
         const isAfter5PM = isAfter5PMPST();
         
-        // Check for 5 PM reset first
-        if (isAfter5PM) {
-            // Reset to initial state for the next day
-            document.body.classList.remove('with-background');
-            currentAudioPath = staticAudioPath;
-            
-            // If audio is playing, stop it
-            if (!audioPlayer.paused) {
-                audioPlayer.pause();
-                stopButton.classList.remove('pulse');
-                stopButton.classList.add('hidden');
-                playButton.classList.remove('hidden');
-                showStatus('Daily reset: Ready for tomorrow');
-            }
-            
-            // Make sure the audio source is set to static for the next day
-            audioPlayer.src = staticAudioPath;
-            return; // Exit early after handling reset
-        }
+        console.log('Time check: After 2 PM: ' + isAfter2PM + ', Before 1:59 PM: ' + isBefore159PM + ', After 5 PM: ' + isAfter5PM);
         
-        // Regular time-based logic for 2 PM
-        if (isAfter2PM) {
-            // Add background with transition
-            if (!document.body.classList.contains('with-background')) {
-                document.body.classList.add('with-background');
-                showStatus('Now in 2 PM mode');
-            }
+        // Apply background only during 2-5 PM period
+        if (isAfter2PM && !isAfter5PM) {
+            document.body.classList.add('with-background');
             
-            // Switch to main audio at 2 PM if needed with crossfade
-            if (currentAudioPath !== mainAudioPath) {
+            // Check if we need to switch audio source for main audio
+            if (audioPlayer.src.indexOf(mainAudioPath) === -1) {
+                // Directly change audio source instead of fading
                 currentAudioPath = mainAudioPath;
+                audioPlayer.src = mainAudioPath;
+                audioPlayer.loop = true;
+                audioPlayer.load();
                 
-                // Use crossfade for smoother transition
-                crossFade(mainAudioPath, 1500, 1500)
-                    .then(() => {
-                        if (!audioPlayer.paused) {
-                            showStatus('Switched to main audio');
-                            stopButton.classList.add('pulse');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error during crossfade:', error);
+                if (wasPlaying) {
+                    audioPlayer.currentTime = currentTime;
+                    audioPlayer.play().catch(function(error) {
+                        console.error('Error playing main audio:', error);
+                        playButton.classList.remove('hidden');
+                        stopButton.classList.add('hidden');
+                        showStatus('Playback error. Try again.');
                     });
+                    getServerTimeAndSync(); // Sync with other listeners
+                }
+                
+                showStatus('Playing Main Audio');
             }
-        } else if (!isAfter5PM) { // Only handle the non-2PM state if we're not after 5 PM
-            // Remove background with transition
-            if (document.body.classList.contains('with-background')) {
-                document.body.classList.remove('with-background');
-                showStatus('Back to standard mode');
-            }
+        } else {
+            document.body.classList.remove('with-background');
             
-            // Switch to static audio with crossfade if needed
-            if (currentAudioPath !== staticAudioPath) {
+            // Check if we need to switch audio source for intermission
+            if (audioPlayer.src.indexOf(staticAudioPath) === -1) {
+                // Directly change audio source instead of fading
                 currentAudioPath = staticAudioPath;
+                audioPlayer.src = staticAudioPath;
+                audioPlayer.loop = true;
+                audioPlayer.load();
                 
-                // Use crossfade for smoother transition
-                crossFade(staticAudioPath, 1500, 1500)
-                    .then(() => {
-                        if (!audioPlayer.paused) {
-                            showStatus('Switched to static audio');
-                            stopButton.classList.add('pulse');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error during crossfade:', error);
+                if (wasPlaying) {
+                    audioPlayer.currentTime = 0; // Start from beginning
+                    audioPlayer.play().catch(function(error) {
+                        console.error('Error playing intermission audio:', error);
+                        playButton.classList.remove('hidden');
+                        stopButton.classList.add('hidden');
+                        showStatus('Playback error. Try again.');
                     });
+                }
+                
+                showStatus('Playing Intermission');
             }
         }
         
-        // Auto stop audio at 1:59 PM PST but only if it's in the transition period
-        // This ensures we don't interfere with playback at 2 PM
-        if (!isBefore159PM && !isAfter2PM && !audioPlayer.paused) {
-            audioPlayer.pause();
-            stopButton.classList.add('hidden');
+        // Show play button unless the audio is already playing with enhanced visual feedback
+        if (audioPlayer.paused) {
             playButton.classList.remove('hidden');
-            showStatus('Transitioning to 2 PM state');
+            stopButton.classList.add('hidden');
+            playButton.classList.add('pulse'); // Make play button pulse when ready to play
+            stopButton.classList.remove('pulse');
+            // Show a subtle ready state indicator
+            if (!statusIndicator.classList.contains('visible')) {
+                showStatus('Ready to play', true);
+            }
+        } else {
+            playButton.classList.add('hidden');
+            stopButton.classList.remove('hidden');
+            playButton.classList.remove('pulse');
+            stopButton.classList.add('pulse'); // Make stop button pulse during playback
+            // Update the status indicator if not already showing a message
+            if (!statusIndicator.classList.contains('visible')) {
+                if (audioPlayer.src.indexOf(mainAudioPath) !== -1) {
+                    showStatus('Playing Main Audio', true);
+                } else {
+                    showStatus('Playing Intermission', true);
+                }
+            }
         }
     }
     
-    // Check time and update UI on page load
+    // Initial UI update
     updateUI();
     
-    // Check time every 10 seconds
-    // This less frequent checking helps prevent playback interruptions
-    let timeCheckInterval = setInterval(updateUI, 10000);
+    // Setup time state check interval - checks every 30 seconds for state changes
+    stateCheckInterval = setInterval(checkTimeState, 30000);
     
-    // Handle play button click
-    playButton.addEventListener('click', () => {
-        // Check if we're in the reset period (after 5PM)
-        if (isAfter5PMPST()) {
-            showStatus('The experience is reset until tomorrow');
-            return;
+    // Also check time state when document regains visibility
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            console.log('Document became visible, checking time state');
+            checkTimeState();
         }
+    });
+    
+    // Initial server time fetch for accurate time
+    getServerTimeAndSync();
+    
+    // Play button click event with better Chrome compatibility
+    playButton.addEventListener('click', function() {
+        // Allow playback at any time, but play different audio based on time
+        const inMainAudioWindow = isAfter2PMPST() && !isAfter5PMPST();
         
-        // Show loading animation
-        playButton.classList.add('hidden');
-        loadingAnimation.classList.remove('hidden');
+        // Extra debugging for Chrome issue
+        console.log('Play button clicked at ' + new Date().toISOString() + ', in main audio window: ' + inMainAudioWindow);
+        console.log('Audio player current state:', audioPlayer.paused ? 'paused' : 'playing', 'src:', audioPlayer.src);
         
-        // Reset error counter on new play attempt
-        audioLoadAttempts = 0;
-        
-        // Determine which audio to play based on current time
-        if (isAfter2PMPST()) {
-            currentAudioPath = mainAudioPath;
-            console.log('Starting main audio playback:', currentAudioPath);
-        } else {
-            currentAudioPath = staticAudioPath;
-            console.log('Starting static audio playback:', currentAudioPath);
-        }
-        
-        // Ensure we have a proper URL - some hosting environments need full paths
-        // Try to build an absolute path by checking the window location
-        const baseUrl = window.location.href.replace(/\/[^/]*$/, '/');
-        const absolutePath = new URL(currentAudioPath, baseUrl).href;
-        
-        console.log('Base URL:', baseUrl);
-        console.log('Absolute path:', absolutePath);
-        
-        // Try different path strategies if we're on a hosting service
-        if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-            // On hosting service - try with absolute path
-            audioPlayer.src = absolutePath;
-        } else {
-            // Local development - use relative path
-            audioPlayer.src = currentAudioPath;
-        }
-        
-        // Set to loop continuously
+        // Always ensure looping is enabled regardless of audio type
         audioPlayer.loop = true;
         
-        // Add more debugging
-        console.log('Audio src set to:', audioPlayer.src);
+        // Show loading animation
+        loadingAnimation.classList.remove('hidden');
+        playButton.classList.add('hidden');
         
-        // Load and play the audio
-        try {
-            audioPlayer.load();
-            console.log('Audio load initiated');
-        } catch (err) {
-            console.error('Error during audio load:', err);
-            showStatus('Error loading audio');
+        // Determine which audio to play based on current time
+        if (isAfter2PMPST() && !isAfter5PMPST()) {
+            // Main audio window (2-5 PM)
+            console.log('Setting main audio for 2-5PM window');
+            currentAudioPath = mainAudioPath;
+            document.body.classList.add('with-background');
+        } else {
+            // Outside main window (before 2PM or after 5PM)
+            console.log('Setting static/intermission audio outside 2-5PM window');
+            currentAudioPath = staticAudioPath;
+            document.body.classList.remove('with-background');
         }
         
-        audioPlayer.addEventListener('canplaythrough', () => {
-            // Hide loading animation, show stop button
+        // Set the audio source directly without URL manipulation for simplicity
+        console.log('Setting audio source to:', currentAudioPath);
+        audioPlayer.src = currentAudioPath;
+        audioPlayer.loop = true;
+        audioPlayer.load();
+        
+        // Extra debugging
+        console.log('Audio source after setting:', audioPlayer.src);
+        
+        // Add a timeout to hide the loading animation if nothing happens after 5 seconds
+        const loadingTimeout = setTimeout(() => {
+            console.log('Audio loading timeout - hiding loading animation');
             loadingAnimation.classList.add('hidden');
-            stopButton.classList.remove('hidden');
-            
-            // Only play if it's not between 1:59 PM and 2 PM PST
-            if (isBefore159PMPST() || isAfter2PMPST()) {
-                audioPlayer.play()
-                    .then(() => {
-                        // Add pulse effect to indicate playing
-                        stopButton.classList.add('pulse');
-                        
-                        // Show status message based on time
-                        if (isAfter2PMPST()) {
-                            showStatus('Now playing main audio');
-                        } else {
-                            showStatus('Now playing static audio');
-                        }
-                        
-                        // After 2PM, disable the regular time check to prevent playback interruptions
-                        if (isAfter2PMPST()) {
-                            // Clear the existing interval
-                            clearInterval(timeCheckInterval);
-                            // Set a less frequent check (once per minute) for the after-2PM state
-                            timeCheckInterval = setInterval(() => {
-                                // Only update background, don't touch audio
-                                document.body.classList.add('with-background');
-                            }, 60000);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Audio playback failed:', error);
-                        showStatus('Playback failed. Please try again.');
-                        stopButton.classList.add('hidden');
-                        playButton.classList.remove('hidden');
-                    });
-            } else {
-                showStatus('Playback not available between 1:59 PM and 2:00 PM PST');
-                // Reset UI
-                stopButton.classList.add('hidden');
+            playButton.classList.remove('hidden');
+            showStatus('Loading timeout. Try again.');
+        }, 5000);
+        
+        // Explicitly try to play the audio with proper error handling
+        console.log('Explicitly attempting to play audio...');
+        const playAttempt = audioPlayer.play();
+        
+        if (playAttempt !== undefined) {
+            playAttempt.then(() => {
+                // Success - audio is playing
+                console.log('Audio playback started successfully');
+                clearTimeout(loadingTimeout); // Clear the timeout since we've successfully started playing
+                loadingAnimation.classList.add('hidden');
+                stopButton.classList.remove('hidden');
+                
+                // Show correct status message based on which audio is playing
+                if (audioPlayer.src.indexOf(mainAudioPath) !== -1) {
+                    showStatus('Playing Main Audio', true);
+                    // Add pulse class to stop button for visual feedback
+                    stopButton.classList.add('pulse');
+                } else {
+                    showStatus('Playing Intermission', true);
+                    stopButton.classList.add('pulse');
+                }
+            }).catch(error => {
+                // Error starting playback
+                console.error('Error playing audio:', error);
+                clearTimeout(loadingTimeout); // Clear the timeout since we already have an error
+                loadingAnimation.classList.add('hidden');
                 playButton.classList.remove('hidden');
+                showStatus('Playback error. Try again.');
+            });
+        } else {
+            // For older browsers that don't return a promise from play()
+            console.log('Play attempt did not return a promise - older browser');
+            // We'll rely on the timeout and other event handlers in this case
+        }
+        
+        // Remove any existing event listeners to avoid duplicates
+        const newEndedHandler = function() {
+            console.log('Audio ended, handling looping manually');
+            // Just in case the default loop doesn't work, manually loop the audio
+            if (isAfter2PMPST() && !isAfter5PMPST()) {
+                // Re-sync on loop for main content
+                getServerTimeAndSync();
+            } else {
+                // Just restart for static (intermission) content
+                audioPlayer.currentTime = 0;
+                audioPlayer.play().catch(function(err) {
+                    console.error('Error restarting audio:', err);
+                    // Only show error UI if there's an actual error
+                    playButton.classList.remove('hidden');
+                    stopButton.classList.add('hidden');
+                    showStatus('Playback error. Try again.');
+                });
+                
+                // Show the correct status message
+                showStatus('Playing Intermission');
             }
-        }, { once: true });
+        };
+        
+        // Use safer event listener adding/removing
+        audioPlayer.removeEventListener('ended', newEndedHandler);
+        audioPlayer.addEventListener('ended', newEndedHandler);
+        
+        // Note: The canplaythrough handler has been replaced with Promise-based play() handling above
     });
     
     // Show/hide volume control on stop button long press
@@ -286,64 +502,9 @@ document.addEventListener('DOMContentLoaded', () => {
         clearTimeout(pressTimer);
     });
     
-    // Audio Crossfade Function
-    function crossFade(newSource, fadeOutDuration = 1000, fadeInDuration = 1000) {
-        return new Promise((resolve) => {
-            // Remember current volume and playback state
-            const currentVolume = audioPlayer.volume;
-            const wasPlaying = !audioPlayer.paused;
-            let oldAudio = null;
-            
-            // If currently playing, create a clone to fade out
-            if (wasPlaying) {
-                // Create a temporary audio element with current source
-                oldAudio = new Audio(audioPlayer.src);
-                oldAudio.volume = currentVolume;
-                oldAudio.currentTime = audioPlayer.currentTime;
-                oldAudio.play();
-                
-                // Fade out the old audio
-                const fadeOutInterval = setInterval(() => {
-                    if (oldAudio.volume > 0.05) {
-                        oldAudio.volume -= 0.05;
-                    } else {
-                        clearInterval(fadeOutInterval);
-                        oldAudio.pause();
-                        oldAudio = null;
-                    }
-                }, fadeOutDuration / 20);
-            }
-            
-            // Set new source and prepare to play
-            audioPlayer.src = newSource;
-            audioPlayer.volume = 0;
-            audioPlayer.load();
-            
-            // When new audio can play, start fading it in
-            audioPlayer.addEventListener('canplaythrough', () => {
-                if (wasPlaying) {
-                    audioPlayer.play();
-                    
-                    // Fade in the new audio
-                    let newVolume = 0;
-                    const fadeInInterval = setInterval(() => {
-                        if (newVolume < currentVolume) {
-                            newVolume += 0.05;
-                            if (newVolume > currentVolume) newVolume = currentVolume;
-                            audioPlayer.volume = newVolume;
-                        } else {
-                            clearInterval(fadeInInterval);
-                            resolve();
-                        }
-                    }, fadeInDuration / 20);
-                } else {
-                    // If not playing, just set volume back to normal
-                    audioPlayer.volume = currentVolume;
-                    resolve();
-                }
-            }, { once: true });
-        });
-    }
+    // The crossFade function has been removed
+    // Audio source changes now happen directly without fading effects
+    // This improves browser compatibility and fixes Chrome syntax errors
     
     // Handle volume change
     volumeSlider.addEventListener('input', () => {
@@ -402,11 +563,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (key === 'i' || key === 'I') {
             let stateMessage = '';
             if (isAfter5PMPST()) {
-                stateMessage = 'Currently in reset mode until tomorrow';
+                stateMessage = 'Currently in intermission mode until tomorrow';
             } else if (isAfter2PMPST()) {
                 stateMessage = 'Currently in 2 PM mode with main audio';
             } else if (isBefore159PMPST()) {
-                stateMessage = 'Currently in static audio mode';
+                stateMessage = 'Currently in intermission mode';
             } else {
                 stateMessage = 'Currently in transition mode (1:59-2:00 PM)';
             }
@@ -449,22 +610,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 5000);
     });
     
-    // Handle stop button click
+    // Stop button click event
     stopButton.addEventListener('click', () => {
         // Pause audio
         audioPlayer.pause();
         
-        // Remove pulse effect
-        stopButton.classList.remove('pulse');
-        
         // Reset UI
         stopButton.classList.add('hidden');
+        stopButton.classList.remove('pulse');
         playButton.classList.remove('hidden');
+        playButton.classList.add('pulse');
         
         // Hide volume control if visible
         volumeControl.classList.remove('visible');
         
-        showStatus('Playback stopped');
+        showStatus('Paused', true);
+        
+        // Clear listener count update interval when paused
+        clearInterval(listenerCountUpdateInterval);
+        updateListenerCount(); // Update count to reflect we left
     });
     
     // Additional event listeners for audio
@@ -472,7 +636,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // This should only happen if loop is disabled for some reason
         stopButton.classList.add('hidden');
         playButton.classList.remove('hidden');
-        showStatus('Playback ended');
+        showStatus('Ended');
     });
     
     // Enhanced error handling for audio loading
@@ -513,8 +677,8 @@ document.addEventListener('DOMContentLoaded', () => {
         playButton.classList.remove('hidden');
     });
     
-    // Status indicator function
-    function showStatus(message) {
+    // Status indicator function with improved visual feedback
+    function showStatus(message, persistent = false) {
         // Safely handle the case where statusIndicator might not be available yet
         if (!statusIndicator) {
             console.warn('Status indicator not available yet');
@@ -532,10 +696,12 @@ document.addEventListener('DOMContentLoaded', () => {
         statusIndicator.classList.remove('hidden');
         statusIndicator.classList.add('visible');
         
-        // Auto-hide after 3 seconds
-        statusTimeout = setTimeout(() => {
-            statusIndicator.classList.remove('visible');
-        }, 3000);
+        // Only auto-hide non-persistent messages
+        if (!persistent) {
+            statusTimeout = setTimeout(() => {
+                statusIndicator.classList.remove('visible');
+            }, 3000);
+        }
     }
     
     // Modified event handler to avoid interfering with button clicks on mobile
@@ -568,4 +734,35 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+    
+    // Initialize the correct audio source based on time window, but don't auto-play
+    const inMainAudioWindow = isAfter2PMPST() && !isAfter5PMPST();
+    if (!inMainAudioWindow) {
+        console.log('Outside 2-5PM window, setting up static audio source');
+        
+        // Make sure we're using the correct audio source
+        if (audioPlayer.src.indexOf(staticAudioPath) === -1) {
+            audioPlayer.src = staticAudioPath;
+            audioPlayer.load();
+        }
+        
+        console.log('Static audio source is ready, waiting for user to press play button');
+    } else {
+        console.log('In 2-5PM window, setting up main audio source');
+        
+        // Make sure we're using the correct audio source for main audio
+        if (audioPlayer.src.indexOf(mainAudioPath) === -1) {
+            audioPlayer.src = mainAudioPath;
+            audioPlayer.load();
+        }
+        
+        console.log('Main audio source is ready, waiting for user to press play button');
+    }
+    
+    // Only play audio when the play button is clicked (defined earlier in the code)
+    // The play button click handler will manage all playback
+    console.log('Audio sources configured, waiting for user to press play');
+    
+    // Make sure loop is enabled
+    audioPlayer.loop = true;
 });

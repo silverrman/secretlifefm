@@ -22,22 +22,44 @@
     </script>
     <link rel="icon" href="favicon.ico" type="image/x-icon">
     <link rel="apple-touch-icon" href="favicon.ico">
-    <!-- Preload the background image to avoid flicker -->
-    <link rel="preload" as="image" href="https://secretlife.fm/img/e16e1cf2-f660-4247-9819-6c96a80b3b2b_1682553600.jpeg">
+    <!-- Time-conditional preload for background image -->
+    <script>
+        // Only preload the background image during the 2-5 PM window when it's actually used
+        function isPacificTimeBetween2And5PM() {
+            const formatter = new Intl.DateTimeFormat('en-US', {
+                timeZone: 'America/Los_Angeles',
+                hour: 'numeric',
+                hour12: false
+            });
+            const hour = parseInt(formatter.format(new Date()), 10);
+            return hour >= 14 && hour < 17; // Between 2 PM and 5 PM
+        }
+        
+        if (isPacificTimeBetween2And5PM()) {
+            const preloadLink = document.createElement('link');
+            preloadLink.rel = 'preload';
+            preloadLink.as = 'image';
+            preloadLink.href = 'background.jpg';
+            document.head.appendChild(preloadLink);
+        }
+    </script>
 </head>
 <body>
     <div class="container">
         <div class="control-wrapper">
-            <div id="play-button" class="control-button play" aria-label="Play"></div>
+            <button id="play-button" class="control-button play" aria-label="Play" type="button"></button>
             <div id="loading-animation" class="loading-animation hidden">
                 <div class="spinner"></div>
             </div>
-            <div id="stop-button" class="control-button stop hidden" aria-label="Stop"></div>
+            <button id="stop-button" class="control-button stop hidden" aria-label="Stop" type="button"></button>
             
             <!-- Volume control (hidden by default) -->
             <div id="volume-control" class="volume-control hidden">
                 <input type="range" min="0" max="1" step="0.05" value="1" class="volume-slider" id="volume-slider">
             </div>
+            
+            <!-- Listener count indicator -->
+            <div id="listener-count" class="listener-count">1 listener</div>
         </div>
         
         <!-- Status indicator -->

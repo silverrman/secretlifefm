@@ -29,10 +29,37 @@ body {
 }
 
 body.with-background {
-    background-image: url('https://secretlife.fm/img/e16e1cf2-f660-4247-9819-6c96a80b3b2b_1682553600.jpeg');
-    background-size: cover;
-    background-position: center;
+    /* Base background settings for Safari compatibility */
+    background-image: url('background.jpg');
     background-repeat: no-repeat;
+    
+    /* Better handling for various screen sizes */
+    background-size: cover; /* Better coverage across browsers */
+    background-position: center center;
+    
+    /* Safari has issues with fixed backgrounds */
+    background-attachment: scroll;
+    
+    /* Add a subtle fill color to avoid empty spaces on larger screens */
+    background-color: #000;
+}
+
+/* Desktop-specific adjustments */
+@media screen and (min-width: 1024px) {
+    body.with-background {
+        /* Adjust size to balance between full coverage and quality */
+        background-size: cover;
+        background-position: center center;
+    }
+}
+
+/* Mobile-specific adjustments - keep current behavior */
+@media screen and (max-width: 768px) {
+    body.with-background {
+        background-size: cover;
+        background-position: center center;
+        background-attachment: scroll; /* Remove fixed attachment on mobile to fix touch events */
+    }
 }
 
 .container {
@@ -185,15 +212,31 @@ body.with-background {
     bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
-    font-size: 12px;
-    color: #999;
+    padding: 8px 16px;
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    border-radius: 20px;
+    font-size: 14px;
     opacity: 0;
-    transition: opacity 0.5s ease;
-    text-align: center;
-    padding: 5px 10px;
-    border-radius: 10px;
-    background-color: rgba(255, 255, 255, 0.8);
+    transition: opacity 0.3s ease;
     z-index: 10;
+}
+
+/* Listener count */
+.listener-count {
+    margin-top: 15px;
+    padding: 6px 12px;
+    background-color: rgba(0, 0, 0, 0.4);
+    color: white;
+    border-radius: 15px;
+    font-size: 12px;
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
+    text-align: center;
+}
+
+.listener-count:hover {
+    opacity: 0.9;
 }
 
 .status-indicator.visible {
@@ -279,10 +322,6 @@ body.with-background {
 @media screen and (max-width: 480px) {
     :root {
         --button-size: var(--button-size-small);
-    }
-    
-    body.with-background {
-        background-position: center center;
     }
     
     .container {
