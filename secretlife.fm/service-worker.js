@@ -16,7 +16,7 @@ const CORE_ASSETS = [
 // Audio files that will use a different caching strategy
 const AUDIO_FILES = [
   '/secretlifestatic/secretlife_static.mp3',
-  '/secretlifemedia/SofaEditB.mp3'
+  '/secretlifemedia/SofaEditC.mp3'
 ];
 
 // Install event - cache core assets
