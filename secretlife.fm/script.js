@@ -194,11 +194,15 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Setup listener count ping interval (only when active)
     function setupListenerCountInterval() {
+        // Listener count feature disabled
         clearInterval(listenerCountUpdateInterval);
+        // Skip updating listener counts since the feature is not being used
+        /* 
         if (!audioPlayer.paused) {
             updateListenerCount(); // Update immediately when starting
             listenerCountUpdateInterval = setInterval(updateListenerCount, 30000); // Update every 30 seconds
         }
+        */
     }
     
     // Simple check for time-based audio selection and state changes
@@ -696,12 +700,10 @@ document.addEventListener('DOMContentLoaded', () => {
         statusIndicator.classList.remove('hidden');
         statusIndicator.classList.add('visible');
         
-        // Only auto-hide non-persistent messages
-        if (!persistent) {
-            statusTimeout = setTimeout(() => {
-                statusIndicator.classList.remove('visible');
-            }, 3000);
-        }
+        // Always auto-hide messages after a delay - ignore the persistent flag
+        statusTimeout = setTimeout(() => {
+            statusIndicator.classList.remove('visible');
+        }, 3000);
     }
     
     // Modified event handler to avoid interfering with button clicks on mobile
