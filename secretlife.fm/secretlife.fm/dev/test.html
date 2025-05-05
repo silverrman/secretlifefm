@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        button {
+            padding: 10px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>secretlife.fm Test Page</h1>
+    <p>This is a test page to diagnose rendering issues</p>
+    
+    <button onclick="testMainPage()">Load Main Page</button>
+    <button onclick="checkJSConsole()">Check JS Errors</button>
+    
+    <div id="results" style="margin-top: 20px; padding: 10px; background: #f5f5f5;"></div>
+    
+    <script>
+        function testMainPage() {
+            try {
+                fetch('index.html')
+                    .then(response => response.text())
+                    .then(html => {
+                        document.getElementById('results').innerHTML = 
+                            'HTML loaded successfully. Length: ' + html.length + ' characters';
+                    })
+                    .catch(error => {
+                        document.getElementById('results').innerHTML = 
+                            'Error loading HTML: ' + error.message;
+                    });
+            } catch (e) {
+                document.getElementById('results').innerHTML = 'Error: ' + e.message;
+            }
+        }
+        
+        function checkJSConsole() {
+            try {
+                // Create a script element to try loading the main script
+                const script = document.createElement('script');
+                script.onload = () => {
+                    document.getElementById('results').innerHTML = 
+                        'Script loaded successfully! No syntax errors.';
+                };
+                script.onerror = (e) => {
+                    document.getElementById('results').innerHTML = 
+                        'Script loading error: ' + e.message;
+                };
+                
+                // First, get a fresh copy of script.js
+                fetch('script.js?t=' + new Date().getTime())
+                    .then(response => response.text())
+                    .then(js => {
+                        document.getElementById('results').innerHTML = 
+                            'Script content loaded. Checking for obvious syntax errors...';
+                            
+                        // Basic syntax check 
+                        try {
+                            new Function(js);
+                            document.getElementById('results').innerHTML += 
+                                '<br>No basic syntax errors found!';
+                        } catch (syntaxError) {
+                            document.getElementById('results').innerHTML += 
+                                '<br>Syntax error found: ' + syntaxError.message;
+                        }
+                    });
+            } catch (e) {
+                document.getElementById('results').innerHTML = 'Error: ' + e.message;
+            }
+        }
+    </script>
+</body>
+</html>
