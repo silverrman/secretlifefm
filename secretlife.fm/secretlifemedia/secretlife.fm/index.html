@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes"><!-- For Chrome/Android -->    
+    <meta name="apple-mobile-web-app-capable" content="yes"><!-- For iOS compatibility -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="description" content="secretlife.fm - A time-based audio experience">
+    <title>secretlife.fm</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- PWA Support with conditional loading to avoid CORS issues -->
+    <script>
+        // Only load manifest.json when served via http(s) to avoid CORS errors
+        if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+            const manifestLink = document.createElement('link');
+            manifestLink.rel = 'manifest';
+            manifestLink.href = 'manifest.json';
+            document.head.appendChild(manifestLink);
+        }
+    </script>
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <link rel="apple-touch-icon" href="favicon.ico">
+    <!-- Time-conditional preload for background image -->
+    <script>
+        // Only preload the background image during the 2-5 PM window when it's actually used
+        function isPacificTimeBetween2And5PM() {
+            const formatter = new Intl.DateTimeFormat('en-US', {
+                timeZone: 'America/Los_Angeles',
+                hour: 'numeric',
+                hour12: false
+            });
+            const hour = parseInt(formatter.format(new Date()), 10);
+            return hour >= 14 && hour < 17; // Between 2 PM and 5 PM
+        }
+        
+        if (isPacificTimeBetween2And5PM()) {
+            const preloadLink = document.createElement('link');
+            preloadLink.rel = 'preload';
+            preloadLink.as = 'image';
+            preloadLink.href = 'background.jpg';
+            document.head.appendChild(preloadLink);
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <div class="control-wrapper">
+            <button id="play-button" class="control-button play" aria-label="Play" type="button"></button>
+            <div id="loading-animation" class="loading-animation hidden">
+                <div class="spinner"></div>
+            </div>
+            <button id="stop-button" class="control-button stop hidden" aria-label="Stop" type="button"></button>
+            
+            <!-- Volume control (hidden by default) -->
+            <div id="volume-control" class="volume-control hidden">
+                <input type="range" min="0" max="1" step="0.05" value="1" class="volume-slider" id="volume-slider">
+            </div>
+            
+            <!-- Listener count indicator (hidden for now) -->
+            <div id="listener-count" class="listener-count hidden">1 listener</div>
+        </div>
+        
+        <!-- Status indicator -->
+        <div id="status-indicator" class="status-indicator hidden"></div>
+        
+        <audio id="audio-player" preload="none">
+            <!-- Audio source will be added dynamically -->
+        </audio>
+    </div>
+    
+    <script src="script.js"></script>
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('service-worker.js').catch(error => {
+                    console.log('Service Worker registration failed:', error);
+                });
+            });
+        }
+    </script>
+</body>
+</html>
