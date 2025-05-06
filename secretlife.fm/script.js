@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Audio paths - using the same paths that worked in the test HTML file
-    const mainAudioPath = 'secretlifemedia/SecretLifeLA.mp3?versionFinal'; // Updated for cache busting
+    const mainAudioPath = 'secretlifemedia/SofaEditA.mp3?versionFinal'; // Updated for new main audio
     const staticAudioPath = 'secretlifestatic/secretlife_static.mp3?versionFinal';
     
     // Log the paths for debugging
