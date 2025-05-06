@@ -1,6 +1,6 @@
 // Service Worker for secretlife.fm
 const CACHE_NAME = 'secretlife-cache-v3';
-const AUDIO_CACHE_NAME = 'secretlife-fm-audio-cache-v3'; // Bumped version to force audio cache refresh
+const AUDIO_CACHE_NAME = 'secretlife-fm-audio-cache-v4'; // Bumped version to force audio cache refresh
 
 // Core assets to cache immediately
 const CORE_ASSETS = [
@@ -16,7 +16,7 @@ const CORE_ASSETS = [
 // Audio files that will use a different caching strategy
 const AUDIO_FILES = [
   '/secretlifestatic/secretlife_static.mp3?versionFinal',
-  '/secretlifemedia/SecretLifeLA.mp3?versionFinal'
+  '/secretlifemedia/SofaEditA.mp3?versionFinal'
 ];
 
 // Install event - cache core assets
